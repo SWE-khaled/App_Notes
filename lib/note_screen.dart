@@ -21,6 +21,12 @@ class _NotesScreenState extends State<NotesScreen> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _controller.loadNotes();
+  }
+
   void _showAddDialog() {
     showDialog(
       context: context,

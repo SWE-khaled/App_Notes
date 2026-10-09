@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:notes/note_controller.dart';
-import 'package:notes/note_dialog.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:notes/Network/hive_helper.dart';
+import 'package:notes/cubit/cubit/note_cubit.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -13,53 +14,90 @@ class _NotesScreenState extends State<NotesScreen> {
   static const Color backgroundColor = Color(0xFFE0E0E0);
   static const Color titleColor = Colors.black;
 
-  final NotesController _controller = NotesController();
+  final TextEditingController _textController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
-    _controller.dispose();
+    _textController.dispose();
     super.dispose();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _controller.loadNotes();
+  String? _validateNote(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Note cannot be empty';
+    }
+    return null;
   }
 
-  void _showAddDialog() {
+  void _showNoteDialog({
+    required String title,
+    required String actionText,
+    String initialText = '',
+    required void Function(String text) onSubmit,
+  }) {
+    _textController.text = initialText;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => NoteDialog(
-        title: 'Add Note',
-        actionText: 'Add',
-        validator: _controller.validateNote,
-        onSubmit: _controller.addNote,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: backgroundColor,
+        title: Text(title),
+        content: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: _textController,
+            validator: _validateNote,
+            autofocus: true,
+            maxLines: null,
+            decoration: const InputDecoration(hintText: 'Write your note...'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+          ),
+          TextButton(
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                onSubmit(_textController.text.trim());
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            child: Text(
+              actionText,
+              style: const TextStyle(color: Colors.black),
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  void _showAddDialog() {
+    _showNoteDialog(
+      title: 'Add Note',
+      actionText: 'Add',
+      onSubmit: (text) => context.read<NoteCubit>().addNote(text),
+    );
+  }
+
   void _showUpdateDialog(int index) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => NoteDialog(
-        title: 'Update Note',
-        actionText: 'Update',
-        initialText: _controller.notes[index].content,
-        validator: _controller.validateNote,
-        onSubmit: (text) => _controller.updateNote(index, text),
-      ),
+    _showNoteDialog(
+      title: 'Update Note',
+      actionText: 'Update',
+      initialText: HiveHelper.myNotes[index],
+      onSubmit: (text) => context.read<NoteCubit>().updateNote(index, text),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _controller,
-      builder: (context, _) {
-        final notes = _controller.notes;
+    return BlocBuilder<NoteCubit, NoteState>(
+      builder: (context, state) {
+        final notes = HiveHelper.myNotes;
 
         return Scaffold(
           backgroundColor: backgroundColor,
@@ -69,7 +107,7 @@ class _NotesScreenState extends State<NotesScreen> {
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: TextButton(
-                  onPressed: _controller.clearAll,
+                  onPressed: () => context.read<NoteCubit>().clearAllNotes(),
                   child: const Text(
                     "Clear All",
                     style: TextStyle(color: titleColor, fontSize: 16),
@@ -116,12 +154,13 @@ class _NotesScreenState extends State<NotesScreen> {
                                 right: 15,
                                 top: 12,
                               ),
-                              child: Center(child: Text(notes[index].content)),
+                              child: Center(child: Text(notes[index])),
                             ),
                           ),
                         ),
                         IconButton(
-                          onPressed: () => _controller.deleteNote(index),
+                          onPressed: () =>
+                              context.read<NoteCubit>().deleteNote(index),
                           icon: const Icon(Icons.delete, color: Colors.red),
                         ),
                       ],
